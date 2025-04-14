@@ -1,15 +1,16 @@
 # pwninit_template
-## Установка
+## Setup
 
-1. Клонировать репозиторий:
+1. Clone the repo
 ```
 git clone https://github.com/Nepaletka/pwninit_template
+cd pwninit_template
 ```
-2. Запустить скрипт
+2. Run script
 ```
 ./setup.sh
 ```
-3. Обновить конфиг
+3. Reload your shell configuration
 ```
 source ~/.zshrc
 ```

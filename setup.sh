@@ -14,13 +14,13 @@ if [[ -d "$TEMPLATE" ]]; then
 fi
 
 echo "[*] Creating config..."
-cp -r ./pwninit-templates "$TEMPLATE"
-cp -r ./libs "$LIBS"
+cp -r ./pwninit-templates/* "$TEMPLATE"
+cp -r ./libs/* "$LIBS"
 
 # === Add pwninit() to .zshrc ===
 echo '[*] Adding pwninit() function to ~/.zshrc...'
-if ! grep -q 'pwninit()' ~/.zshrc; then
-  cat << 'EOF' >> ~/.zshrc
+sed -i '/^pwninit() {/,/^}/d' ~/.zshrc
+cat << 'EOF' >> ~/.zshrc
 
 pwninit() {
   local TEMPLATE_PATH=~/.config/pwninit-templates/default_template.py
@@ -56,15 +56,12 @@ pwninit() {
     echo "Wrapper for the pwninit command using custom template path and binary name."
     return 0
   fi
-  command cp -r "$LIBS_PATH"  libs
+  command cp -r "$LIBS_PATH"/*  ./libs
   command pwninit --template-path "$TEMPLATE_PATH" --template-bin-name "$BINARY_NAME"
 }
 
 EOF
   echo "[*] Function added."
-else
-  echo "[*] Function already exists in ~/.zshrc"
-fi
 
 # === Reload shell ===
 source ~/.zshrc

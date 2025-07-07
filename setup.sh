@@ -5,7 +5,7 @@ LIBS=~/.config/pwninit-libs
 
 # === Confirm overwrite ===
 if [[ -d "$TEMPLATE" ]]; then
-  echo -n "[*] Template already exists! Rewrite? [y/N]: "
+  echo -n "[*] Templates already exists! Rewrite? [y/N]: "
   read answer
   if [[ "$answer" != "y" ]]; then
     echo "[*] Aborted."
@@ -56,7 +56,7 @@ pwninit() {
     echo "Wrapper for the pwninit command using custom template path and binary name."
     return 0
   fi
-  command cp -r "$LIBS_PATH" ./libs
+  command cp -r "$LIBS_PATH"  libs
   command pwninit --template-path "$TEMPLATE_PATH" --template-bin-name "$BINARY_NAME"
 }
 

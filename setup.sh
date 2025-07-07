@@ -20,6 +20,7 @@ cp -r ./libs/* "$LIBS"
 # === Add pwninit() to .zshrc ===
 echo '[*] Adding pwninit() function to ~/.zshrc...'
 sed -i '/^pwninit() {/,/^}/d' ~/.zshrc
+sed -i ':a;/^[[:space:]]*$/{$d;N;ba}' ~/.zshrc
 cat << 'EOF' >> ~/.zshrc
 
 pwninit() {

@@ -58,6 +58,7 @@ pwninit() {
     echo "Wrapper for the pwninit command using custom template path and binary name."
     return 0
   fi
+  mkdir ./libs
   command cp -r "$LIBS_PATH"/*  ./libs
   command pwninit --template-path "$TEMPLATE_PATH" --template-bin-name "$BINARY_NAME"
 }

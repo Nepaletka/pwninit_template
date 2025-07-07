@@ -14,6 +14,7 @@ if [[ -d "$TEMPLATE" ]]; then
 fi
 
 echo "[*] Creating config..."
+mkdir -p "$TEMPLATE" "$LIBS"
 cp -r ./pwninit-templates/* "$TEMPLATE"
 cp -r ./libs/* "$LIBS"
 

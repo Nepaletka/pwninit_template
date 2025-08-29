@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from pwn import *
 from libs.debug import *
 from libs.heap import *

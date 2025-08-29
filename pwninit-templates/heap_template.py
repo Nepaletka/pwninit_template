@@ -7,7 +7,7 @@ from libs.heap import *
 #https://agrohacksstuff.io/posts/pwntools-tricks-and-examples/
 
 context.binary = binary = ELF('{bin_name}_patched', checksec=False)
-context.terminal = ['gnome-terminal', '--'])
+context.terminal = ['gnome-terminal', '--']
 context.log_level = "debug"
 
 sl = lambda x: p.sendline(x)

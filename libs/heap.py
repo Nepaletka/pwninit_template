@@ -43,3 +43,14 @@ def hi(p):
             continue
         clean_lines.append(line)
     print('\n'.join(clean_lines))
+
+def demangle(val):
+    mask = 0xfff << 52
+    while mask:
+        v = val & mask
+        val ^= (v >> 12)
+        mask >>= 12
+    return val
+
+def mangle(val, pos):
+    return val ^ (pos >> 12)

@@ -1,21 +1,31 @@
 #!/usr/bin/env python3
-
 from pwn import *
 from libs.debug import *
 from libs.heap import *
 
 #https://agrohacksstuff.io/posts/pwntools-tricks-and-examples/
 
-context.binary = binary = ELF('{bin_name}_patched', checksec=False)
+# ==================[START DEFINIITONS]======================
+context.binary = exe = ELF('{bin_name}_patched', checksec=False)
 context.terminal = ['gnome-terminal', '--']
 context.log_level = "debug"
-
-sl = lambda x: p.sendline(x)
-sa = lambda x, y: p.sendafter(x, y)
-sla = lambda x, y: p.sendlineafter(x, y)
-ru = lambda x: p.recvuntil(x)
 
 p = process()
 #p = remote("host", port)
 
-p.interactive()
+# =======================[EXPANSIONS]============================
+se   = lambda data  : p.send(data)
+sl   = lambda data  : p.sendline(data)
+sa   = lambda ip,op : p.sendafter(ip,op)
+sla  = lambda ip,op : p.sendlineafter(ip,op) 
+ru  = lambda data  : p.recvuntil(data)
+rl  = lambda       : p.recvline()
+rv   = lambda nbyts : p.recv(nbyts)  
+pop  = lambda       : p.interactive()
+log  = lambda nm,v  : p.info(f"{nm.upper()} : {hex(v)}")
+leak = lambda num   : u64(p.recv(num).ljust(8,b"\x00"))
+
+# >>>>>>>>>>>>>>>>>>>[EXPLOIT STARTS HERE]>>>>>>>>>>>>>>>>>>>>>>>
+
+
+pop()

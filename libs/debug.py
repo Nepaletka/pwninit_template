@@ -18,5 +18,3 @@ def debug(p):
 #         warn (f"PAYLOAD: {payload} RECV: {recv}")
 #     except:
 #         pass
-
-#leak.ljust(8, b"\x00")

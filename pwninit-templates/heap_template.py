@@ -22,7 +22,7 @@ ru  = lambda data  : p.recvuntil(data)
 rl  = lambda       : p.recvline()
 rv   = lambda nbyts : p.recv(nbyts)  
 pop  = lambda       : p.interactive()
-log  = lambda nm,v  : p.info(f"{nm.upper()} : {hex(v)}")
+log  = lambda nm,v  : p.info(nm.upper() + " : " + hex(v))
 leak = lambda num   : u64(p.recv(num).ljust(8,b"\x00"))
 
 # >>>>>>>>>>>>>>>>>>>[EXPLOIT STARTS HERE]>>>>>>>>>>>>>>>>>>>>>>>

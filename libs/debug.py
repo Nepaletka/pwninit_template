@@ -1,17 +1,56 @@
 """Local debug(p), or OpenSSH + QEMU for Linux x86 binaries on Apple Silicon."""
 
 import atexit
+import os
 import posixpath
 import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
+import time
 from pathlib import Path
 
-from pwn import ELF, PIPE, process, util
+from pwn import ELF, PIPE, context, process, util
 
 __all__ = ["debug", "orb_process"]
+
+GHOSTTY_SCRIPT = '''
+on run argv
+    tell application "Ghostty"
+        set cfg to new surface configuration
+        set command of cfg to item 1 of argv
+        set initial working directory of cfg to item 2 of argv
+        set wait after command of cfg to false
+        if (count of windows) > 0 then
+            set origin to focused terminal of selected tab of front window
+            set pane to split origin direction right with configuration cfg
+        else
+            set win to new window with configuration cfg
+            set pane to terminal 1 of selected tab of win
+        end if
+        focus pane
+    end tell
+end run
+'''
+
+
+def _launch_ghostty(p, command):
+    launcher = Path(p._temp.name) / "launch-debugger.sh"
+    pidfile = Path(p._temp.name) / "debugger.pid"
+    launcher.write_text(
+        '#!/bin/sh\nset -eu\necho $$ > ' + shlex.quote(str(pidfile)) +
+        '\nexec ' + shlex.join(command) + '\n'
+    )
+    subprocess.run(["osascript", "-", shlex.join(["/bin/sh", str(launcher)]),
+                    str(Path.cwd())], input=GHOSTTY_SCRIPT, text=True, check=True)
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if pidfile.exists() and pidfile.read_text().strip():
+            return int(pidfile.read_text().strip())
+        time.sleep(0.05)
+    raise RuntimeError("Ghostty did not start pwndbg; check Automation permissions and Ghostty >= 1.3")
 
 
 class orb_process(process):
@@ -123,6 +162,16 @@ class orb_process(process):
             return
         self._closed_orb = True
         atexit.unregister(self.close)
+        pidfile = Path(self._temp.name) / "debugger.pid"
+        if pidfile.exists():
+            try:
+                pid = int(pidfile.read_text().strip())
+                command = subprocess.check_output(
+                    ["ps", "-p", str(pid), "-o", "command="], text=True)
+                if str(Path(self._temp.name) / "session.gdb") in command:
+                    os.kill(pid, 15)
+            except (OSError, ValueError, subprocess.CalledProcessError):
+                pass
         try:
             if self.remote_dir:
                 # Only kill the recorded PID if it still belongs to this session.
@@ -155,7 +204,7 @@ class orb_process(process):
             self._temp.cleanup()
 
 
-def debug(p, gdbscript="continue"):
+def debug(p, gdbscript="continue", *, terminal=None):
     """Attach local pwndbg to an orb QEMU stub; retain old local PID behavior."""
     if isinstance(p, orb_process):
         if not p.gdb_enabled:
@@ -172,9 +221,13 @@ def debug(p, gdbscript="continue"):
         )
         # Older pwntools versions lack context.gdb_binary. Use the public terminal
         # launcher directly so the chosen debugger is always local pwndbg.
-        return util.misc.run_in_new_terminal(
-            [debugger, "-q", p.local_binary, "-x", str(script)]
-        )
+        command = [debugger, "-q", p.local_binary, "-x", str(script)]
+        if terminal == "ghostty" or (
+            terminal is None and sys.platform == "darwin" and
+            os.environ.get("TERM_PROGRAM", "").lower() == "ghostty" and not context.terminal
+        ):
+            return _launch_ghostty(p, command)
+        return util.misc.run_in_new_terminal(command, terminal=terminal)
     pid = util.proc.pidof(p)[0]
     print(pid)
     util.proc.wait_for_debugger(pid)

@@ -2,15 +2,16 @@
 from pwn import *
 from libs.debug import *
 
-context.binary = exe = ELF('{bin_name}_patched', checksec=False)
-context.terminal = ['tmux', 'splitw', '-h']
-context.log_level = 'debug'
+{bindings}
+context.binary = {bin_name}
+context.log_level = 'debug' if args.DEBUG else 'info'
 
-# SSH uses the existing `ssh orb` configuration. No gdbserver is involved.
-p = orb_process(exe, gdb_enabled=bool(args.GDB))
-# For a supplied libc/loader, use instead:
-# p = orb_process(exe, gdb_enabled=bool(args.GDB),
-#                 files=['libc.so.6'], loader='ld-linux-x86-64.so.2')
+p = orb_process(
+    {bin_name},
+    gdb_enabled=bool(args.GDB),
+    files=[libc.path] if 'libc' in globals() else [],
+    loader=ld.path if 'ld' in globals() else None,
+)
 if args.GDB:
     debug(p, 'break main\ncontinue')
 
@@ -24,7 +25,5 @@ rv   = lambda n    : p.recv(n)
 pop  = lambda      : p.interactive()
 log  = lambda nm,v : p.info(nm.upper() + ' : ' + hex(v))
 leak = lambda n    : u64(p.recv(n).ljust(8, b'\x00'))
-
-# EXPLOIT STARTS HERE
 
 pop()

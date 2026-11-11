@@ -1,54 +1,65 @@
-# Pwntools + OrbStack + local pwndbg
+# Отладка через OrbStack и Ghostty
 
-This adapts Nepaletka/pwninit_template, inspected at commit
-`6c956433dad94d8aac72b90d18fb05c726cea890`.
-It uses OpenSSH's `orb` alias, QEMU's own GDB stub, and a local pwndbg window.
-There is no remote gdbserver/ptrace attach.
+## Установка
 
-## Install
-
-On the Mac, use your Python environment with pwntools installed. Install tmux
-and pwndbg if needed:
+Запусти `./install-macos.sh` и подключи shell-команды через `source ~/.zshrc`.
+Нужны Homebrew и настроенный alias `ssh orb`. Установщик ставит локальные
+инструменты; QEMU устанавливается внутри VM отдельно:
 
 ```sh
-brew install tmux pwndbg/tap/pwndbg-gdb
 ssh -t orb 'sudo apt install -y qemu-user'
 ```
 
-Copy `libs/debug.py` to the `libs/debug.py` alongside your exploit. The two
-files under `pwninit-templates/` can replace the corresponding files in your
-template repository. To affect future generated tasks, update the copies used
-by your setup: `~/.config/pwninit-libs/debug.py` and
-`~/.config/pwninit-templates/{default,heap}_template.py`.
-Existing task directories have their own copies and need updating separately.
+Установщик создаёт отдельный Python venv с pwntools. `pwnpy` запускает этот
+Python, а `pwninit` вызывает собранный upstream pwninit с нужным шаблоном.
+Можно задать `--config-dir /path` и `--zshrc /path` для другого каталога настроек.
+Учитываются `XDG_CONFIG_HOME` и `ZDOTDIR`. Только сгенерированный блок подключения
+и старая функция pwninit заменяются в `.zshrc`; прочие настройки сохраняются.
+Первоначальный файл сохраняется рядом с суффиксом `.pwninit.bak`.
 
-## Change an existing exploit
+На Mac утилита Linux `eu-unstrip` недоступна: upstream pwninit может вывести
+предупреждение при попытке добавить debug symbols к libc. Для этого шага можно
+использовать pwninit/elfutils внутри Linux VM; передача готовых libc/loader в
+отладчик от этого не зависит.
 
-Keep `from libs.debug import *` and `context.binary = exe = ELF(...)`.
-Replace `context.terminal` and `p = process()` with:
+## Запуск
+
+В Ghostty 1.3+ достаточно:
+
+```sh
+pwninit chall
+pwnpy solve.py GDB
+```
+
+При первом AppleScript-вызове macOS может запросить Automation-доступ к Ghostty.
+Отладчик открывается в правой панели. Если открытого окна нет, создаётся окно.
+Существующие настройки и горячие клавиши Ghostty не меняются.
+
+Без `GDB` запускается только программа через QEMU. `DEBUG` включает подробные
+логи pwntools. Шаблон с `GDB` останавливается на `main`; введи `continue` в
+pwndbg для продолжения. У stripped-бинаря без main замени вызов на `debug(p)`
+или укажи подходящий breakpoint.
+
+Существующие task-каталоги содержат собственную копию `libs/debug.py`: её нужно
+обновить отдельно. В старом solve.py убери обязательный `context.terminal` с
+tmux/gnome-terminal и замени запуск на:
 
 ```python
-context.terminal = ['tmux', 'splitw', '-h']
 p = orb_process(exe, gdb_enabled=bool(args.GDB))
 if args.GDB:
     debug(p, 'break main\ncontinue')
 ```
 
-Your existing `se/sl/sa/sla/ru/rl/rv/pop` helpers still use the same `p` tube.
-Run from a tmux session on the Mac:
+`debug(p)` вызывается до первого send/recv: QEMU ждёт подключения.
+`sendline`, `recvuntil`, `interactive` и сокращения шаблона работают с тем же p.
+Для принудительного выбора Ghostty есть `debug(p, terminal='ghostty')`.
+Чтобы использовать tmux, явно установи `context.terminal = ['tmux', 'splitw', '-h']`.
 
-```sh
-tmux new-session -s pwn
-python3 solve.py GDB
-```
+## libc и loader
 
-Without `GDB`, `python3 solve.py` runs under QEMU without a debugger.
-With `GDB`, QEMU waits for debug(p). Call debug(p) before the first send/recv.
-The sample stops at main; enter `continue` in pwndbg to let I/O proceed.
-For stripped challenges, replace `break main` with a suitable breakpoint or
-just use `debug(p)` to connect and continue.
-
-## Supplied libc and loader (pwninit)
+Сгенерированные upstream pwninit ELF-привязки используются в шаблонах напрямую.
+При наличии привязок libc/ld они автоматически передаются в orb_process.
+Вручную это выглядит так:
 
 ```python
 p = orb_process(
@@ -57,54 +68,54 @@ p = orb_process(
     files=['libc.so.6'],
     loader='ld-linux-x86-64.so.2',
 )
-if args.GDB:
-    debug(p, 'break main\ncontinue')
 ```
 
-Use the actual loader filename in your task. The library must be uploaded with
-the name its loader searches for, usually `libc.so.6`. For a versioned libc,
-make a local `libc.so.6` copy/symlink first and pass that path.
+Используй имя loader из своего таска. Файлы загружаются только из явно заданного
+списка; symlink разыменовываются с сохранением исходного имени. Имена файлов
+сохраняются, подкаталоги не переносятся. Совпадающие имена разных файлов запрещены.
+Название libc должно совпадать с тем, что ищет загрузчик, обычно `libc.so.6`.
 
-Files are flattened to their basenames in a unique remote session directory;
-basename collisions are rejected. Only explicitly listed files are uploaded.
-The supplied loader is installed into a session-local QEMU interpreter prefix,
-matching the executable's original PT_INTERP (including absolute paths in
-`*_patched` files). The executable itself remains unchanged, which preserves
-GDB's PIE relocation. `LD_LIBRARY_PATH=.` selects the supplied libraries.
-Other dependencies and data files must be passed via `files` as needed.
+QEMU получает отдельный interpreter prefix с loader по исходному PT_INTERP,
+поэтому абсолютный interpreter path в `_patched` работает внутри VM без
+изменения ELF и базы PIE. `LD_LIBRARY_PATH=.` выбирает загруженную libc.
+Дополнительные зависимости и данные передаются через `files`.
 
-Optional arguments: `host='orb'`, `port=1234`, `argv=[...]`, `env={...}`.
-Supported targets: Linux amd64 and i386 (the latter requires qemu-i386 and the
-appropriate 32-bit loader/libraries inside the VM).
+Параметры: `host='orb'`, `port=1234`, `argv=[...]`, `env={...}`.
+Поддерживаются Linux amd64 и i386; для i386 нужны соответствующие 32-битные
+loader и библиотеки. i386 отдельно не тестировался.
 
-## I/O and lifecycle
+## Ввод/вывод и очистка
 
-stdin/stdout use SSH pipes, so payloads including NUL/0xff are preserved.
-Unlike a terminal, pipes don't force libc stdout to be line buffered. If a
-challenge doesn't flush its prompts, recvuntil/sendlineafter may need a target
-buffering fix. stderr is sent to the parent terminal, outside the payload tube.
+SSH работает без PTY и без отключения stdin: байты NUL/0xff проходят без
+изменений. stderr выводится отдельно от pwntools tube. Pipes не отключают
+буферизацию libc: если таск не сбрасывает prompt, ожидание sendlineafter может
+потребовать настройки буферизации в самой программе.
 
-The returned tube supports context-manager usage and p.close(). Normal Python
-exit also runs cleanup: kill the recorded QEMU process if it is still in the
-session directory, remove remote files, close the SSH master/tunnel, and remove
-local temporary files. Forked processes, a process that changes cwd, SIGKILL,
-or loss of connectivity can require manual cleanup. The OrbStack VM stays up.
+При p.close() и обычном завершении Python удаляется каталог сессии, закрывается
+SSH-туннель и завершаются записанный QEMU-процесс и pwndbg из созданной панели
+Ghostty. Перед завершением процессы проверяются на принадлежность этой сессии.
+VM OrbStack продолжает работать. При SIGKILL, потере связи, fork или смене cwd
+программой очистка может потребоваться вручную.
 
-Port 1234 is reserved on the Mac by the tunnel; another active listener causes
-a clear SSH error. For concurrent sessions use a distinct `port` in each one.
-The remote QEMU listener also needs that port free. Don't connect another GDB
-to a session's port. This is for your controlled orb target; it does not grant
-debug access to an arbitrary CTF service reached through remote(host, port).
+Для параллельных запусков выбирай разные значения port: один и тот же порт
+должен быть свободен на Mac и в VM. Это отладка твоей VM; remote(host, port)
+сам по себе не предоставляет доступ к отладчику чужого CTF-сервиса.
 
-## Validation
+## Проверки
 
-An end-to-end test in the connected orb runs a compiled amd64 PIE program with
-and without GDB, checks a breakpoint in main, sends/receives five bytes including
-NUL/0xff/CR/LF, checks the supplied-loader/libc mode, and checks remote session
-directory cleanup. The debugger launch in the test is headless; interactive
-tmux window creation is not part of that test. i386 is not tested.
+```sh
+python3 -m unittest discover -s tests -v
+```
 
-References:
-- https://docs.orbstack.dev/machines/#debugging-with-gdb-lldb
-- https://docs.pwntools.com/en/stable/util/misc.html
-- https://docs.pwntools.com/en/stable/tubes/processes.html
+Тесты проверяют повторную установку, сохранение `.zshrc` и backup, пути с
+пробелами, выбор heap-шаблона, аргументы upstream pwninit и генерацию solve.py.
+Homebrew/Cargo-команды в unit-тесте заменены mock: зависимости на компьютере
+не устанавливаются при запуске тестов.
+
+Дополнительно проверен полный цикл на подключённом orb и Ghostty 1.3.1:
+брейкпоинт в main, бинарный обмен с NUL/0xff, loader/libc через symlink и
+завершение отладчика с удалением каталога сессии.
+
+Справка: [Ghostty AppleScript](https://ghostty.org/docs/features/applescript),
+[OrbStack debugging](https://docs.orbstack.dev/machines/#debugging-with-gdb-lldb),
+[pwninit](https://github.com/io12/pwninit).

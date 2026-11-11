@@ -14,3 +14,11 @@ cd pwninit_template
 ```
 source ~/.zshrc
 ```
+
+## macOS / OrbStack debugging
+
+The templates can run Linux x86 binaries in the `orb` SSH host with QEMU and
+open local pwndbg through `debug(p)`. Existing pwntools I/O helpers still work.
+
+See [OrbStack setup and usage](docs/orb-debugging.md) for dependencies, launching
+with `GDB`, supplied libc/loader support, and cleanup behavior.

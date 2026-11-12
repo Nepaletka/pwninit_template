@@ -16,6 +16,9 @@ def main():
     args, extra = parser.parse_known_args()
     if not args.binary.is_file():
         parser.error(f"binary not found: {args.binary}")
+    with args.binary.open("rb") as binary:
+        if binary.read(4) != b"\x7fELF":
+            parser.error("expected a Linux ELF; compile the source inside orb, then scp the binary to the Mac")
     settings = json.loads(Path(__file__).with_name("pwninit.json").read_text())
     config = Path(settings["config_dir"])
     engine = settings["engine"]

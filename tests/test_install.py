@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -23,7 +24,7 @@ class InstallTests(unittest.TestCase):
             python, engine = "/existing/venv/bin/python", "/existing/tool/bin/pwninit"
             installer.install(config, root / ".zshrc", python, engine)
             subprocess.run([sys.executable, str(ROOT / "scripts/install.py"),
-                            "--skip-deps", "--config-dir", str(config),
+                            "--skip-deps", "--shell", "zsh", "--config-dir", str(config),
                             "--zshrc", str(root / ".zshrc")], check=True,
                            stdout=subprocess.DEVNULL)
             settings = json.loads((config / "pwninit.json").read_text())
@@ -70,7 +71,7 @@ Path('solve.py').write_text(template.format(bindings=bindings, bin_name='exe', p
             for heap in [False, True]:
                 task = root / ("heap" if heap else "default")
                 task.mkdir()
-                (task / "target name").write_bytes(b"test")
+                (task / "target name").write_bytes(b"\x7fELFtest")
                 command = [sys.executable, str(config / "pwninit-run.py")]
                 if heap:
                     command.append("--heap")
@@ -92,14 +93,67 @@ Path('solve.py').write_text(template.format(bindings=bindings, bin_name='exe', p
             with patch.object(installer.platform, "system", return_value="Darwin"), \
                  patch.object(installer.shutil, "which", return_value="/opt/homebrew/bin/brew"), \
                  patch.object(installer.subprocess, "run") as run, \
-                 patch.object(installer.subprocess, "check_output", side_effect=["/opt/homebrew\n", "/opt/homebrew/opt/openssl@3\n"]):
+                 patch.object(installer.subprocess, "check_output", side_effect=["/opt/homebrew\n", "/opt/homebrew/opt/python@3.13\n", "/opt/homebrew/opt/openssl@3\n"]):
                 python, engine = installer.install_dependencies(Path(folder))
             calls = [call.args[0] for call in run.call_args_list]
             self.assertTrue(any("pwndbg/tap/pwndbg-gdb" in cmd for cmd in calls))
+            self.assertIn("python@3.13", calls[0])
+            self.assertIn("cmake", calls[0])
+            self.assertTrue(any(cmd[0] == "/opt/homebrew/opt/python@3.13/bin/python3.13" and
+                                "venv" in cmd for cmd in calls))
             self.assertTrue(any("pwntools>=4.14,<5" in cmd for cmd in calls))
             self.assertTrue(any("--locked" in cmd and "pwninit" in cmd for cmd in calls))
-            self.assertTrue(python.endswith("pwninit-env/bin/python"))
+            self.assertTrue(python.endswith("pwninit-env-py313/bin/python"))
             self.assertTrue(engine.endswith("pwninit-tool/bin/pwninit"))
+
+    def test_reject_macho_before_calling_upstream(self):
+        with tempfile.TemporaryDirectory() as folder:
+            binary = Path(folder) / "mac-binary"
+            binary.write_bytes(b"\xcf\xfa\xed\xfe")
+            result = subprocess.run([sys.executable, str(ROOT / "scripts/pwninit-run.py"),
+                                     str(binary)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("expected a Linux ELF", result.stderr)
+
+    @unittest.skipUnless(shutil.which("fish"), "fish is not installed")
+    def test_fish_functions_paths_backup_and_cli(self):
+        with tempfile.TemporaryDirectory(prefix="pwn fish ") as folder:
+            root = Path(folder)
+            config = root / "config's $literal"
+            zshrc, fish_config = root / ".zshrc", config / "fish/conf.d/pwninit.fish"
+            zshrc.write_text("do not change zsh\n")
+            fish_config.parent.mkdir(parents=True)
+            fish_config.write_text("# original fish integration\n")
+            engine = root / "engine"
+            engine.write_text("#!" + sys.executable + "\nimport sys\nprint(repr(sys.argv[1:]))\n")
+            engine.chmod(0o755)
+            binary = root / "target space"
+            binary.write_bytes(b"\x7fELFtest")
+            installer.install(config, zshrc, sys.executable, str(engine), "fish", fish_config)
+            first = fish_config.read_bytes()
+            installer.install(config, zshrc, sys.executable, str(engine), "fish", fish_config)
+            self.assertEqual(first, fish_config.read_bytes())
+            self.assertEqual(zshrc.read_text(), "do not change zsh\n")
+            self.assertEqual(fish_config.with_name("pwninit.fish.pwninit.bak").read_text(),
+                             "# original fish integration\n")
+            command = ("source " + installer.fish_quote(fish_config) +
+                       "\npwnpy -c 'print(123)'\npwninit --heap " + installer.fish_quote(binary))
+            output = subprocess.check_output(["fish", "-N", "-c", command], text=True, cwd=root)
+            self.assertIn("123", output)
+            self.assertIn("--bin", output)
+            self.assertIn("heap_template.py", output)
+            self.assertTrue((root / "libs/debug.py").exists())
+            result = subprocess.check_output([
+                sys.executable, str(ROOT / "scripts/install.py"), "--skip-deps",
+                "--shell", "fish", "--config-dir", str(config), "--zshrc", str(zshrc)
+            ], text=True)
+            self.assertIn("pwninit.fish", result)
+            self.assertNotIn("source " + str(zshrc), result)
+
+    def test_fish_parent_detected_even_if_login_shell_is_zsh(self):
+        with patch.dict(installer.os.environ, {"SHELL": "/bin/zsh"}), \
+             patch.object(installer.subprocess, "check_output", return_value="/opt/homebrew/bin/fish\n"):
+            self.assertEqual(installer.detect_shell(), "fish")
 
 
 if __name__ == "__main__":

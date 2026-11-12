@@ -11,18 +11,41 @@ QEMU в `orb`, pwndbg открывается в панели Ghostty. tmux не 
 ```sh
 git clone -b codex/orb-pwntools-debug https://github.com/Nepaletka/pwninit_template.git
 cd pwninit_template
-./install-macos.sh
-source ~/.zshrc
+./install-macos.sh --shell fish
+source ~/.config/fish/conf.d/pwninit.fish
 ssh -t orb 'sudo apt install -y qemu-user'
 ```
 
-Устанавливаются Homebrew Python, Rust, зависимости сборки pwninit, patchelf,
+Устанавливаются Homebrew Python 3.13, CMake, Rust, зависимости сборки pwninit, patchelf,
 pwndbg и pwntools в отдельном venv. pwninit собирается через Cargo в каталог
 настроек проекта. Системный Python и конфиг Ghostty не меняются.
 
-Повторный запуск обновляет шаблоны и сохраняет один блок подключения в `.zshrc`.
-Перед первым изменением создаётся `.zshrc.pwninit.bak`. Установщик не выполняет
-`.zshrc` сам: команду `source` нужно выполнить в своём терминале.
+В fish функции устанавливаются в `~/.config/fish/conf.d/pwninit.fish`. Для zsh
+используй `./install-macos.sh --shell zsh`, затем `source ~/.zshrc`. Без `--shell`
+установщик определяет fish/zsh по родительскому процессу и `$SHELL`.
+
+Повторный запуск не дублирует настройки. Перед первым изменением существующего
+файла сохраняется backup с суффиксом `.pwninit.bak`. Установщик сам не выполняет
+shell-конфиги: команду `source` нужно выполнить в своём терминале.
+
+Окружение Python 3.13 создаётся в `~/.config/pwninit-env-py313`. Старое
+`pwninit-env` (в том числе неудачная установка на Python 3.15) не переиспользуется
+и не удаляется. На Apple Silicon Unicorn может собираться из исходников, поэтому
+CMake обязателен.
+
+## Если у тебя только исходник C
+
+Компилируй внутри Linux VM. Обычный `gcc` на macOS создаёт Mach-O, а здесь нужен
+Linux ELF:
+
+```sh
+scp test.c orb:/tmp/test.c
+ssh orb 'gcc -g3 -O0 -fno-omit-frame-pointer /tmp/test.c -o /tmp/chall'
+scp orb:/tmp/chall ./chall
+file chall
+```
+
+В выводе `file` должно быть `ELF`, а не `Mach-O`. Затем:
 
 ## Использование в Ghostty
 

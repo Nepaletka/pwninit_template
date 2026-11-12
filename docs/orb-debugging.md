@@ -2,7 +2,9 @@
 
 ## Установка
 
-Запусти `./install-macos.sh` и подключи shell-команды через `source ~/.zshrc`.
+В fish запусти `./install-macos.sh --shell fish`, затем
+`source ~/.config/fish/conf.d/pwninit.fish`. В zsh используй `--shell zsh` и
+`source ~/.zshrc`. Без флага выбирается оболочка родительского процесса или `$SHELL`.
 Нужны Homebrew и настроенный alias `ssh orb`. Установщик ставит локальные
 инструменты; QEMU устанавливается внутри VM отдельно:
 
@@ -10,12 +12,14 @@
 ssh -t orb 'sudo apt install -y qemu-user'
 ```
 
-Установщик создаёт отдельный Python venv с pwntools. `pwnpy` запускает этот
+Установщик устанавливает Python 3.13 и CMake, затем создаёт отдельный venv
+`pwninit-env-py313` с pwntools. Старое окружение Python 3.15 остаётся нетронутым. `pwnpy` запускает этот
 Python, а `pwninit` вызывает собранный upstream pwninit с нужным шаблоном.
-Можно задать `--config-dir /path` и `--zshrc /path` для другого каталога настроек.
-Учитываются `XDG_CONFIG_HOME` и `ZDOTDIR`. Только сгенерированный блок подключения
-и старая функция pwninit заменяются в `.zshrc`; прочие настройки сохраняются.
-Первоначальный файл сохраняется рядом с суффиксом `.pwninit.bak`.
+Можно задать `--config-dir /path`, `--zshrc /path` или `--fish-config /path`.
+Учитываются `XDG_CONFIG_HOME` и `ZDOTDIR`. Fish получает отдельный conf.d-файл;
+`.zshrc` при выборе fish не меняется. В zsh заменяются сгенерированный блок и
+старая функция pwninit; прочие настройки сохраняются. Первоначальный файл
+сохраняется рядом с суффиксом `.pwninit.bak`.
 
 На Mac утилита Linux `eu-unstrip` недоступна: upstream pwninit может вывести
 предупреждение при попытке добавить debug symbols к libc. Для этого шага можно
@@ -107,8 +111,9 @@ VM OrbStack продолжает работать. При SIGKILL, потере 
 python3 -m unittest discover -s tests -v
 ```
 
-Тесты проверяют повторную установку, сохранение `.zshrc` и backup, пути с
-пробелами, выбор heap-шаблона, аргументы upstream pwninit и генерацию solve.py.
+Тесты проверяют повторную установку, сохранение `.zshrc` и backup, работу
+функций в настоящем fish, пути с пробелами/кавычками, выбор Python 3.13 и CMake,
+отклонение Mach-O, heap-шаблон, аргументы upstream pwninit и генерацию solve.py.
 Homebrew/Cargo-команды в unit-тесте заменены mock: зависимости на компьютере
 не устанавливаются при запуске тестов.
 

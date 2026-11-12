@@ -80,28 +80,35 @@ def detect_shell():
     return "fish" if Path(os.environ.get("SHELL", "")).name == "fish" else "zsh"
 
 
-def install(config_dir, zshrc, python, engine, shell="zsh", fish_config=None):
+def install(config_dir, zshrc, python, engine, shell="zsh", fish_config=None, keep_templates=False):
     config_dir.mkdir(parents=True, exist_ok=True)
     for folder in ["pwninit-templates", "libs"]:
         destination = config_dir / ("pwninit-libs" if folder == "libs" else folder)
         destination.mkdir(exist_ok=True)
         for file in (ROOT / folder).glob("*.py"):
+            if keep_templates and folder == "pwninit-templates" and (destination / file.name).exists():
+                continue
             shutil.copy2(file, destination / file.name)
     shutil.copy2(ROOT / "scripts/pwninit-run.py", config_dir / "pwninit-run.py")
+    shutil.copy2(ROOT / "scripts/pwncompile.py", config_dir / "pwncompile.py")
     settings = {"config_dir": str(config_dir), "engine": engine, "python": python, "shell": shell}
     (config_dir / "pwninit.json").write_text(json.dumps(settings, indent=2) + "\n")
     integration = config_dir / "pwninit.zsh"
     integration.write_text(
         "pwninit() {\n  " + shlex.quote(python) + " " +
         shlex.quote(str(config_dir / "pwninit-run.py")) + ' "$@"\n}\n\n' +
-        "pwnpy() {\n  " + shlex.quote(python) + ' "$@"\n}\n'
+        "pwnpy() {\n  " + shlex.quote(python) + ' "$@"\n}\n\n' +
+        "pwncompile() {\n  " + shlex.quote(python) + " " +
+        shlex.quote(str(config_dir / "pwncompile.py")) + ' "$@"\n}\n'
     )
     if shell == "fish":
         fish_config = fish_config or config_dir / "fish/conf.d/pwninit.fish"
         contents = (
             "function pwninit\n    command " + fish_quote(python) + " " +
             fish_quote(config_dir / "pwninit-run.py") + " $argv\nend\n\n" +
-            "function pwnpy\n    command " + fish_quote(python) + " $argv\nend\n"
+            "function pwnpy\n    command " + fish_quote(python) + " $argv\nend\n\n" +
+            "function pwncompile\n    command " + fish_quote(python) + " " +
+            fish_quote(config_dir / "pwncompile.py") + " $argv\nend\n"
         )
         fish_config.parent.mkdir(parents=True, exist_ok=True)
         if fish_config.exists() and fish_config.read_text() != contents:
@@ -117,6 +124,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--macos", action="store_true", help="install Homebrew tools and a Python venv")
     parser.add_argument("--skip-deps", action="store_true", help="only install templates and shell integration")
+    parser.add_argument("--keep-templates", action="store_true", help="preserve existing customized templates")
     parser.add_argument("--shell", choices=["auto", "fish", "zsh"], default="auto")
     parser.add_argument("--fish-config", type=Path, help="override fish conf.d integration file")
     parser.add_argument("--config-dir", type=Path,
@@ -136,7 +144,7 @@ def main():
     fish_config = (args.fish_config.expanduser().resolve() if args.fish_config else
                    config_dir / "fish/conf.d/pwninit.fish")
     zshrc = args.zshrc.expanduser().resolve()
-    install(config_dir, zshrc, python, engine, shell, fish_config)
+    install(config_dir, zshrc, python, engine, shell, fish_config, args.keep_templates)
     print("Installed. In your shell, run:")
     source = fish_config if shell == "fish" else zshrc
     quote = fish_quote if shell == "fish" else shlex.quote

@@ -17,6 +17,20 @@ spec.loader.exec_module(installer)
 
 
 class InstallTests(unittest.TestCase):
+    def test_keep_templates_installs_new_commands_without_overwriting_custom_template(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            config, zshrc = root / "config", root / ".zshrc"
+            installer.install(config, zshrc, sys.executable, "pwninit")
+            template = config / "pwninit-templates/default_template.py"
+            template.write_text("my custom template")
+            installer.install(config, zshrc, sys.executable, "pwninit", keep_templates=True)
+            self.assertEqual(template.read_text(), "my custom template")
+            self.assertTrue((config / "pwncompile.py").exists())
+            command = "source " + shlex.quote(str(config / "pwninit.zsh")) + "\npwncompile --help"
+            output = subprocess.check_output(["zsh", "-f", "-c", command], text=True)
+            self.assertIn("Compile a C/C++ source", output)
+
     def test_templates_only_update_preserves_installed_tools(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -137,11 +151,12 @@ Path('solve.py').write_text(template.format(bindings=bindings, bin_name='exe', p
             self.assertEqual(fish_config.with_name("pwninit.fish.pwninit.bak").read_text(),
                              "# original fish integration\n")
             command = ("source " + installer.fish_quote(fish_config) +
-                       "\npwnpy -c 'print(123)'\npwninit --heap " + installer.fish_quote(binary))
+                       "\npwnpy -c 'print(123)'\npwncompile --help\npwninit --heap " + installer.fish_quote(binary))
             output = subprocess.check_output(["fish", "-N", "-c", command], text=True, cwd=root)
             self.assertIn("123", output)
             self.assertIn("--bin", output)
             self.assertIn("heap_template.py", output)
+            self.assertIn("Compile a C/C++ source", output)
             self.assertTrue((root / "libs/debug.py").exists())
             result = subprocess.check_output([
                 sys.executable, str(ROOT / "scripts/install.py"), "--skip-deps",

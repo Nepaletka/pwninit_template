@@ -39,13 +39,27 @@ CMake обязателен.
 Linux ELF:
 
 ```sh
-scp test.c orb:/tmp/test.c
-ssh orb 'gcc -g3 -O0 -fno-omit-frame-pointer /tmp/test.c -o /tmp/chall'
-scp orb:/tmp/chall ./chall
+pwncompile test.c -o chall
 file chall
 ```
 
-В выводе `file` должно быть `ELF`, а не `Mach-O`. Затем:
+`pwncompile` отправляет один исходник в отдельный временный каталог `orb`,
+собирает его через GCC и скачивает Linux ELF. По умолчанию включены `-m64 -g3
+-O0 -fno-omit-frame-pointer`. Каталог в VM удаляется после сборки. При ошибке
+компилятора существующий локальный бинарник остаётся нетронутым. Пути отладочной
+информации указывают на исходник на Mac, поэтому GDB показывает его строки.
+
+```sh
+pwncompile test.c                         # результат: ./test
+pwncompile test.c -o chall -- -fno-stack-protector -no-pie
+pwncompile test.cpp -o chall --cc g++
+pwncompile test.c -o chall --host orb
+```
+
+Дополнительные флаги компилятора передаются после `--`. Загружается один исходник;
+локальные заголовки и дополнительные файлы проекта автоматически не переносятся.
+Для сборки в VM должен быть установлен GCC (`sudo apt install gcc`), для C++ — g++.
+В выводе `file` должно быть `ELF`. Затем:
 
 ## Использование в Ghostty
 
@@ -72,5 +86,12 @@ pwnpy solve.py
 
 На Mac также доступно `./install-macos.sh --skip-deps`. Этот режим использует
 текущий Python и существующий pwninit; он не создаёт окружение с зависимостями.
+
+Чтобы добавить новые команды, сохранив свои правки шаблонов:
+
+```sh
+./setup.sh --shell fish --keep-templates
+source ~/.config/fish/conf.d/pwninit.fish
+```
 
 Подробнее: [отладка, библиотеки и очистка](docs/orb-debugging.md).

@@ -5,7 +5,8 @@ from libs.debug import *
 #https://agrohacksstuff.io/posts/pwntools-tricks-and-examples/
 
 # ==================[START DEFINIITONS]======================
-context.binary = exe = ELF('{bin_name}_patched', checksec=False)
+{bindings}
+context.binary = exe
 context.log_level = "debug"
 
 p = orb_process(
